@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fileserver v1.0</title>
+  
+  <!-- Fonte Inter via Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Estilos complementares -->
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen flex flex-col font-sans transition-colors duration-200">
+
+  <!-- ==================== HEADER ==================== -->
+  <header class="sticky top-0 z-30 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800 transition-colors">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+      
+      <!-- Logo e Título -->
+      <div class="flex items-center gap-3">
+        <div class="p-2 bg-indigo-600 rounded-xl text-white shadow-md shadow-indigo-500/20">
+          <i data-lucide="server" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-white">Fileserver</h1>
+            <span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950/80 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">v1.0</span>
+          </div>
+          <p class="text-xs text-slate-500 dark:text-slate-400 hidden sm:block">Compartilhamento de arquivos local & LAN</p>
+        </div>
+      </div>
+
+      <!-- Endereço de Rede (IP da LAN em destaque) e Ações de Topo -->
+      <div class="flex items-center gap-2 sm:gap-3">
+        
+        <!-- Badge com IP da LAN e Botão Copiar -->
+        <div id="lan-ip-container" class="flex items-center bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 rounded-lg px-2.5 py-1 text-xs font-medium text-slate-700 dark:text-slate-300 shadow-sm">
+          <i data-lucide="wifi" class="w-3.5 h-3.5 text-emerald-500 mr-1.5 animate-pulse"></i>
+          <span class="hidden md:inline mr-1 text-slate-500 dark:text-slate-400">Rede:</span>
+          <span id="lan-ip-text" class="font-mono font-semibold text-slate-900 dark:text-white">Detectando...</span>
+          <button id="btn-copy-url" title="Copiar URL para a área de transferência" class="ml-2 p-1 text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 rounded transition-colors focus:outline-none">
+            <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
+
+        <!-- Botão Ferramentas -->
+        <button id="btn-open-tools" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/60 shadow-sm transition-colors">
+          <i data-lucide="wrench" class="w-3.5 h-3.5 text-indigo-500"></i>
+          <span class="hidden sm:inline">Ferramentas</span>
+        </button>
+
+        <!-- Toggle de Tema (Claro / Escuro) -->
+        <button id="btn-toggle-theme" title="Alternar tema claro/escuro" class="p-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 border border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition-colors">
+          <i id="theme-icon" data-lucide="moon" class="w-4 h-4"></i>
+        </button>
+
+      </div>
+    </div>
+  </header>
+
+  <!-- ==================== CONTEÚDO PRINCIPAL ==================== -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    
+    <!-- Barra Superior de Controle e Breadcrumb -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
+      
+      <!-- Breadcrumb de Navegação -->
+      <nav id="breadcrumbs" aria-label="Navegação em pastas" class="flex items-center flex-wrap gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
+        <button class="breadcrumb-item flex items-center gap-1.5 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors px-2 py-1 rounded-md hover:bg-slate-200/60 dark:hover:bg-slate-800/80" data-path="">
+          <i data-lucide="home" class="w-4 h-4 text-indigo-500"></i>
+          <span>Raiz</span>
+        </button>
+      </nav>
+
+      <!-- Ações: Botão de Upload e Busca -->
+      <div class="flex items-center gap-2">
+        <!-- Campo de Busca -->
+        <div class="relative flex-1 sm:w-64">
+          <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+          <input type="text" id="input-search" placeholder="Filtrar arquivos..." class="w-full pl-9 pr-3 py-1.5 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-slate-900 dark:text-slate-100 placeholder-slate-400 shadow-sm transition-colors">
+        </div>
+
+        <!-- Botão de Upload -->
+        <label for="input-file" class="cursor-pointer inline-flex items-center gap-2 px-3.5 py-1.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm hover:shadow-indigo-500/20 active:scale-95 transition-all">
+          <i data-lucide="upload-cloud" class="w-4 h-4"></i>
+          <span>Upload</span>
+        </label>
+        <input type="file" id="input-file" multiple class="hidden">
+      </div>
+
+    </div>
+
+    <!-- Dropzone de Drag and Drop -->
+    <div id="dropzone" class="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-5 mb-5 text-center bg-slate-50/50 dark:bg-slate-900/40 hover:bg-indigo-50/40 dark:hover:bg-indigo-950/20 hover:border-indigo-400 dark:hover:border-indigo-600 transition-all cursor-pointer">
+      <div class="flex flex-col items-center justify-center gap-1.5 pointer-events-none">
+        <i data-lucide="arrow-down-to-line" class="w-6 h-6 text-indigo-500 animate-bounce"></i>
+        <p class="text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300">
+          Arraste e solte arquivos aqui para enviar para <span class="font-mono text-indigo-600 dark:text-indigo-400">uploads/</span>
+        </p>
+        <p class="text-xs text-slate-400 dark:text-slate-500">ou use o botão "Upload" acima</p>
+      </div>
+    </div>
+
+    <!-- Barra de Progresso de Upload (Oculta por padrão) -->
+    <div id="upload-progress-container" class="hidden mb-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm">
+      <div class="flex items-center justify-between text-xs font-semibold mb-2">
+        <span id="upload-filename" class="text-slate-700 dark:text-slate-200 truncate max-w-xs">Enviando arquivos...</span>
+        <span id="upload-percentage" class="text-indigo-600 dark:text-indigo-400">0%</span>
+      </div>
+      <div class="w-full bg-slate-100 dark:bg-slate-800 h-2.5 rounded-full overflow-hidden">
+        <div id="upload-progress-bar" class="bg-indigo-600 h-full w-0 transition-all duration-150"></div>
+      </div>
+    </div>
+
+    <!-- Info de Pasta Atual e Ordenação rápida -->
+    <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-3 px-1">
+      <div id="folder-stats">Carregando itens...</div>
+      <div class="flex items-center gap-3">
+        <span class="hidden sm:inline">Clique no cabeçalho para ordenar</span>
+      </div>
+    </div>
+
+    <!-- ==================== TABELA DESKTOP ==================== -->
+    <div class="hidden md:block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm overflow-hidden">
+      <table class="w-full text-left border-collapse">
+        <thead>
+          <tr class="border-b border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-950/40 text-xs font-semibold text-slate-600 dark:text-slate-400 select-none">
+            <th class="py-3 px-4 cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400" id="sort-name">
+              <div class="flex items-center gap-1.5">
+                <span>Nome</span>
+                <i data-lucide="chevrons-up-down" class="w-3.5 h-3.5"></i>
+              </div>
+            </th>
+            <th class="py-3 px-4 w-32 cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400" id="sort-size">
+              <div class="flex items-center gap-1.5">
+                <span>Tamanho</span>
+                <i data-lucide="chevrons-up-down" class="w-3.5 h-3.5"></i>
+              </div>
+            </th>
+            <th class="py-3 px-4 w-44 cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400" id="sort-date">
+              <div class="flex items-center gap-1.5">
+                <span>Modificado em</span>
+                <i data-lucide="chevrons-up-down" class="w-3.5 h-3.5"></i>
+              </div>
+            </th>
+            <th class="py-3 px-4 w-28 text-right">Ações</th>
+          </tr>
+        </thead>
+        <tbody id="file-table-body" class="divide-y divide-slate-100 dark:divide-slate-800/80 text-sm">
+          <!-- Linhas injetadas via JS -->
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ==================== CARDS MOBILE ==================== -->
+    <div id="file-cards-mobile" class="md:hidden flex flex-col gap-2.5">
+      <!-- Cards injetados via JS -->
+    </div>
+
+    <!-- Estado Vazio / Sem Resultados -->
+    <div id="empty-state" class="hidden py-12 text-center">
+      <div class="inline-flex p-3 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 mb-3">
+        <i data-lucide="folder-open" class="w-8 h-8"></i>
+      </div>
+      <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-300">Nenhum arquivo encontrado</h3>
+      <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Este diretório está vazio ou a busca não retornou resultados.</p>
+    </div>
+
+  </main>
+
+  <!-- ==================== FOOTER ==================== -->
+  <footer class="mt-auto border-t border-slate-200 dark:border-slate-800/80 py-4 text-center text-xs text-slate-500 dark:text-slate-400">
+    <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+      <div>
+        <span>Fileserver Python v1.0 • Desenvolvido com zero dependências externas</span>
+      </div>
+      <div class="flex items-center gap-4">
+        <button id="btn-open-roadmap" class="hover:text-indigo-600 dark:hover:text-indigo-400 underline underline-offset-2">
+          Ver Roadmap (v1.1 - v2.0)
+        </button>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ==================== MODAL DE FERRAMENTAS ==================== -->
+  <div id="modal-tools" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm hidden">
+    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl relative">
+      <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+        <div class="flex items-center gap-2">
+          <i data-lucide="wrench" class="w-5 h-5 text-indigo-500"></i>
+          <h2 class="text-base font-bold text-slate-900 dark:text-white">Ferramentas & Integrações</h2>
+        </div>
+        <button id="btn-close-tools" class="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <div class="flex flex-col gap-4 text-sm">
+        
+        <!-- Item 1: FTP Integrado -->
+        <div class="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex items-center justify-between">
+          <div class="pr-3">
+            <div class="flex items-center gap-2">
+              <span class="font-semibold text-slate-800 dark:text-slate-200">FTP Integrado</span>
+              <span class="px-2 py-0.5 text-[10px] font-semibold bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-400 rounded-full border border-amber-200 dark:border-amber-800">Em breve</span>
+            </div>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Servidor FTP nativo rodando em paralelo para clientes legados (v1.2).
+            </p>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer flex-shrink-0">
+            <input type="checkbox" id="toggle-ftp" class="sr-only peer">
+            <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-indigo-600"></div>
+          </label>
+        </div>
+
+        <!-- Item 2: Gerenciador estilo FileZilla -->
+        <div class="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex items-center justify-between">
+          <div class="pr-3">
+            <div class="flex items-center gap-2">
+              <span class="font-semibold text-slate-800 dark:text-slate-200">Gerenciador FileZilla</span>
+              <span class="px-2 py-0.5 text-[10px] font-semibold bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-400 rounded-full border border-amber-200 dark:border-amber-800">Em breve</span>
+            </div>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Interface dual-pane estilo FileZilla com sincronização visual (v1.3).
+            </p>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer flex-shrink-0">
+            <input type="checkbox" id="toggle-filezilla" class="sr-only peer">
+            <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-indigo-600"></div>
+          </label>
+        </div>
+
+      </div>
+
+      <div class="mt-5 text-right">
+        <button id="btn-save-tools" class="px-4 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm transition-colors">
+          Fechar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL DE PREVIEW ==================== -->
+  <div id="modal-preview" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm hidden">
+    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+      <div class="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-800">
+        <div class="flex items-center gap-2 truncate">
+          <i id="preview-icon" data-lucide="file" class="w-5 h-5 text-indigo-500 flex-shrink-0"></i>
+          <h2 id="preview-filename" class="text-sm font-bold text-slate-900 dark:text-white truncate">Visualização</h2>
+        </div>
+        <div class="flex items-center gap-2">
+          <a id="preview-download-link" href="#" class="p-1.5 text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400" title="Baixar">
+            <i data-lucide="download" class="w-4 h-4"></i>
+          </a>
+          <button id="btn-close-preview" class="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+      <div id="preview-body" class="p-4 overflow-auto flex-1 flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+        <!-- Conteúdo do preview (imagem ou texto) injetado via JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL DO ROADMAP ==================== -->
+  <div id="modal-roadmap" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm hidden">
+    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col p-6 shadow-2xl">
+      <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+        <div class="flex items-center gap-2">
+          <i data-lucide="map" class="w-5 h-5 text-indigo-500"></i>
+          <h2 class="text-base font-bold text-slate-900 dark:text-white">Roadmap do Fileserver</h2>
+        </div>
+        <button id="btn-close-roadmap" class="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+      <div class="overflow-y-auto space-y-4 pr-1 text-xs sm:text-sm text-slate-700 dark:text-slate-300">
+        <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60">
+          <span class="font-bold text-indigo-600 dark:text-indigo-400">v1.0 (Versão Atual)</span>
+          <p class="mt-1">UI moderna responsiva, IP da LAN com botão copiar, upload drag & drop para X:\Shared\uploads, ordenação, preview inline e sem dependências externas.</p>
+        </div>
+        <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60">
+          <span class="font-bold text-slate-900 dark:text-white">v1.1</span>
+          <p class="mt-1">Exclusão e renomeação de arquivos com diálogo de confirmação, múltiplos uploads concorrentes e melhorias de performance.</p>
+        </div>
+        <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60">
+          <span class="font-bold text-slate-900 dark:text-white">v1.2</span>
+          <p class="mt-1">FTP integrado funcionando (toggle do menu Ferramentas liga de verdade o serviço), aceitando conexões de clientes legados.</p>
+        </div>
+        <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60">
+          <span class="font-bold text-slate-900 dark:text-white">v1.3</span>
+          <p class="mt-1">Gerenciador de arquivos visual estilo FileZilla: interface de duas colunas com arrastar-e-soltar e sincronização em tempo real.</p>
+        </div>
+        <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60">
+          <span class="font-bold text-slate-900 dark:text-white">v2.0</span>
+          <p class="mt-1">App móvel nativo em React Native + NativeWind consumindo os endpoints REST definidos nesta versão (/api/info, /api/list, /upload, /files).</p>
+        </div>
+      </div>
+      <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 text-right">
+        <button id="btn-dismiss-roadmap" class="px-4 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm">
+          Entendido
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== TOAST NOTIFICAÇÃO ==================== -->
+  <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none"></div>
+
+  <!-- Scripts -->
+  <script src="/static/app.js"></script>
+</body>
+</html>
