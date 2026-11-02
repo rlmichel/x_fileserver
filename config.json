@@ -1,6 +1,8 @@
 {
   "port": 9876,
-  "shared_dir": "X:\\Shared",
+  "base_dir": "files",
+  "external_shared_dir": "X:\\Shared",
+  "shared_alias": "shared",
   "uploads_subfolder": "uploads",
   "ftp_enabled": false,
   "filezilla_manager_enabled": false,

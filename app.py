@@ -9,16 +9,18 @@ import sys
 import traceback
 from socketserver import TCPServer
 
-from server.config import get_shared_paths, load_config
+from server.config import get_base_files_dir, get_external_shared_dir, get_uploads_dir, load_config
 from server.handler import FileserverRequestHandler
 from server.net import get_lan_ip
 
 
 def main() -> None:
-    # Carrega configurações e caminhos
+    # Carrega configurações e caminhos universais
     config = load_config()
     porta = int(config.get("port", 9876))
-    shared_dir, uploads_dir = get_shared_paths()
+    base_dir = get_base_files_dir()
+    external_shared = get_external_shared_dir()
+    uploads_dir = get_uploads_dir()
     lan_ip = get_lan_ip()
 
     # Habilita reutilização rápida da porta para evitar 'Address already in use'
@@ -26,16 +28,18 @@ def main() -> None:
 
     # Inicia o servidor HTTP escutando em todas as interfaces ("0.0.0.0")
     with TCPServer(("", porta), FileserverRequestHandler) as httpd:
-        print("=" * 60, flush=True)
-        print("  📁 Fileserver v1.0 - Servidor de Arquivos", flush=True)
-        print("=" * 60, flush=True)
+        shared_status = f"{external_shared} (mapeado em /files/shared)" if external_shared else "(não detectado - modo universal ativo)"
+        print("=" * 65, flush=True)
+        print("  📁 Fileserver v1.0 - Servidor de Arquivos Universal", flush=True)
+        print("=" * 65, flush=True)
         print(f"  Local:    http://127.0.0.1:{porta}", flush=True)
         print(f"  Rede:     http://{lan_ip}:{porta}   <-- Acesse no celular/outros PCs", flush=True)
-        print(f"  Pasta:    {shared_dir}", flush=True)
+        print(f"  Pasta:    {base_dir}", flush=True)
+        print(f"  Shared:   {shared_status}", flush=True)
         print(f"  Uploads:  {uploads_dir}", flush=True)
-        print("=" * 60, flush=True)
+        print("=" * 65, flush=True)
         print("  Pressione Ctrl+C para encerrar o servidor.", flush=True)
-        print("=" * 60, flush=True)
+        print("=" * 65, flush=True)
         print(flush=True)
 
         try:

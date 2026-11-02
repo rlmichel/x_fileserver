@@ -30,16 +30,29 @@ python3 app.py
 
 ---
 
-## ⚙️ Configuração da Pasta Compartilhada (`X:\Shared`)
+## ⚙️ Arquitetura Universal de Diretórios (`files/` e `X:\Shared`)
 
-Por padrão, o servidor compartilha o diretório `X:\Shared` e armazena os envios em `X:\Shared\uploads\`.
+Para ser **100% universal e portátil**, o Fileserver não depende da existência da unidade `X:\`:
+
+1. **Pasta Inicial Padrão (`files/`)**:
+   - Por padrão, o servidor serve a subpasta [`files/`](files/) localizada no próprio diretório onde o fileserver está rodando.
+   - Os uploads locais caem automaticamente em `files/uploads/`.
+   - Funciona em qualquer sistema operacional (Linux, Windows, macOS) imediatamente sem qualquer configuração.
+
+2. **Mapeamento Transparente de `X:\Shared` (quando disponível)**:
+   - Se a pasta `X:\Shared` estiver conectada no computador, o fileserver a detecta automaticamente e a expõe na raiz como a pasta virtual **`shared`** (`/files/shared`).
+   - Ao navegar em `shared`, o usuário acessa, visualiza e baixa os arquivos reais de `X:\Shared`.
+   - Uploads efetuados dentro de `shared` são direcionados automaticamente para `X:\Shared\uploads\`.
+   - Se o sistema for Linux ou não tiver a unidade `X:\`, o servidor roda tranquilamente servindo a pasta local `files/` sem qualquer erro.
 
 As configurações são armazenadas no arquivo [`config.json`](config.json):
 
 ```json
 {
   "port": 9876,
-  "shared_dir": "X:\\Shared",
+  "base_dir": "files",
+  "external_shared_dir": "X:\\Shared",
+  "shared_alias": "shared",
   "uploads_subfolder": "uploads",
   "ftp_enabled": false,
   "filezilla_manager_enabled": false,
@@ -48,8 +61,9 @@ As configurações são armazenadas no arquivo [`config.json`](config.json):
 }
 ```
 
-- **`shared_dir`**: Caminho absoluto da pasta que será servida. No Windows, aponta para `X:\Shared`. Caso o caminho não esteja disponível ou em ambientes Linux/macOS sem essa unidade, o servidor cria e utiliza um diretório local `./shared` como fallback automático de segurança.
-- **`uploads_subfolder`**: Subpasta criada automaticamente dentro da pasta compartilhada para receber os uploads via navegador.
+- **`base_dir`**: Pasta local base servida pelo fileserver (relativa ou absoluta, padrão `"files"`).
+- **`external_shared_dir`**: Caminho da pasta externa compartilhada (padrão `"X:\\Shared"`). Se não existir, o fileserver opera em modo universal autônomo.
+- **`uploads_subfolder`**: Subpasta criada automaticamente para receber uploads via navegador (padrão `"uploads"`).
 - **`port`**: Porta TCP em que o servidor escutará (padrão `9876`).
 
 ---
@@ -177,16 +191,18 @@ A API REST foi padronizada para permitir que a versão web atual e o futuro apli
 x_fileserver/
 ├── app.py                  # Entrypoint executável por duplo clique
 ├── config.json             # Configurações persistentes
+├── files/                  # Pasta base local servida pelo fileserver (/fileserver/files/)
+│   └── uploads/            # Pasta padrão de envios de arquivos
 ├── README.md               # Documentação técnica
 ├── ROADMAP.md              # Próximas fases (v1.1 a v2.0)
 ├── server/                 # Módulos do backend
 │   ├── __init__.py
-│   ├── config.py           # Gestão de caminhos e config.json
-│   ├── files.py            # Listagem, sanitização e formatação de dados
+│   ├── config.py           # Gestão de caminhos universais e config.json
+│   ├── files.py            # Listagem, sanitização e roteamento dinâmico
 │   ├── handler.py          # HTTP RequestHandler customizado e MultipartParser
 │   └── net.py              # Detecção dinâmica de IP da rede (LAN)
 └── static/                 # Frontend servido diretamente
     ├── app.css             # Estilos adicionais e animações
-    ├── app.js              # Lógica da interface, AJAX e drag-and-drop
-    └── index.html          # Interface responsiva moderna
+    ├── app.js              # Lógica da interface, seleção, AJAX e tema
+    └── index.html          # Interface responsiva moderna com dark mode
 ```

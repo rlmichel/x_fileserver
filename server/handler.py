@@ -14,7 +14,7 @@ import zipfile
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
 
-from server.config import get_shared_paths, load_config, save_config
+from server.config import get_base_files_dir, get_external_shared_dir, get_uploads_dir, load_config, save_config
 from server.files import format_size, list_directory, resolve_safe_path, sanitize_filename
 from server.net import get_lan_ip
 
@@ -304,7 +304,9 @@ class FileserverRequestHandler(BaseHTTPRequestHandler):
     def handle_api_info(self) -> None:
         """Retorna informações de rede, diretórios e configurações do servidor."""
         cfg = load_config()
-        shared_dir, uploads_dir = get_shared_paths()
+        base_dir = get_base_files_dir()
+        external_dir = get_external_shared_dir()
+        uploads_dir = get_uploads_dir()
         lan_ip = get_lan_ip()
         port = cfg.get("port", 9876)
 
@@ -317,7 +319,10 @@ class FileserverRequestHandler(BaseHTTPRequestHandler):
             "local_url": f"http://127.0.0.1:{port}",
             "lan_url": f"http://{lan_ip}:{port}",
             "os": f"{platform.system()} {platform.release()}",
-            "shared_dir": shared_dir,
+            "base_dir": base_dir,
+            "shared_dir": base_dir,
+            "external_shared_dir": external_dir,
+            "has_external_shared": bool(external_dir is not None),
             "uploads_dir": uploads_dir,
             "ftp_enabled": bool(cfg.get("ftp_enabled", False)),
             "filezilla_manager_enabled": bool(cfg.get("filezilla_manager_enabled", False)),
@@ -326,9 +331,8 @@ class FileserverRequestHandler(BaseHTTPRequestHandler):
         self.send_json_response(data)
 
     def handle_api_list(self, rel_path: str) -> None:
-        """Lista arquivos e subpastas de forma segura a partir do diretório compartilhado."""
-        shared_dir, _ = get_shared_paths()
-        data, err = list_directory(shared_dir, rel_path)
+        """Lista arquivos e subpastas de forma segura a partir do diretório inicial ou shared."""
+        data, err = list_directory(rel_path)
         if err:
             self.send_error_json(err, status=HTTPStatus.BAD_REQUEST)
             return
@@ -336,8 +340,7 @@ class FileserverRequestHandler(BaseHTTPRequestHandler):
 
     def handle_file_download(self, rel_file: str, inline: bool = False) -> None:
         """Realiza o download seguro ou preview de um arquivo compartilhado."""
-        shared_dir, _ = get_shared_paths()
-        target_path = resolve_safe_path(shared_dir, rel_file)
+        target_path = resolve_safe_path(rel_file)
 
         if not target_path or not os.path.exists(target_path):
             self.send_error_json("Arquivo não encontrado", status=HTTPStatus.NOT_FOUND)
@@ -394,7 +397,11 @@ class FileserverRequestHandler(BaseHTTPRequestHandler):
             self.send_error_json("Nenhum conteúdo recebido para upload", status=HTTPStatus.BAD_REQUEST)
             return
 
-        _, uploads_dir = get_shared_paths()
+        parsed_url = urlparse(self.path)
+        query = parse_qs(parsed_url.query)
+        current_path = query.get("path", [""])[0]
+
+        uploads_dir = get_uploads_dir(current_path)
         os.makedirs(uploads_dir, exist_ok=True)
 
         try:
@@ -453,11 +460,10 @@ class FileserverRequestHandler(BaseHTTPRequestHandler):
             self.send_error_json("Nenhum arquivo especificado para download", status=HTTPStatus.BAD_REQUEST)
             return
 
-        shared_dir, _ = get_shared_paths()
         valid_files: List[Tuple[str, str]] = []
 
         for rel_file in files:
-            safe_path = resolve_safe_path(shared_dir, str(rel_file))
+            safe_path = resolve_safe_path(str(rel_file))
             if safe_path and os.path.exists(safe_path) and os.path.isfile(safe_path):
                 valid_files.append((safe_path, os.path.basename(safe_path)))
 

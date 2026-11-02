@@ -175,6 +175,12 @@
       renderBreadcrumbs();
       renderItems();
       updateSelectionUI();
+
+      // Atualiza dica de destino do upload
+      const dropDest = document.getElementById('drop-dest-text');
+      if (dropDest) {
+        dropDest.textContent = state.currentPath.startsWith('shared') ? 'shared/uploads/' : 'uploads/';
+      }
     } catch (err) {
       showToast('Falha na conexão com o servidor', 'error');
       console.error('Erro ao carregar diretório:', err);
@@ -237,6 +243,9 @@
   // ÍCONES E CLASSIFICAÇÃO POR TIPO
   // =========================================================================
   function getFileIconInfo(item) {
+    if (item.is_shared) {
+      return { icon: 'share-2', color: 'text-indigo-500 dark:text-indigo-400', isShared: true };
+    }
     if (item.is_dir) {
       return { icon: 'folder', color: 'text-amber-500 dark:text-amber-400' };
     }
@@ -472,8 +481,9 @@
               <i data-lucide="${iconInfo.icon}" class="w-5 h-5 flex-shrink-0 ${iconInfo.color}"></i>
               ${
                 item.is_dir
-                  ? `<button onclick="window.fileserver.openDir('${escapeAttr(item.rel_path)}')" class="hover:text-indigo-600 dark:hover:text-indigo-400 text-left font-semibold hover:underline">
-                      ${escapeHtml(item.name)}
+                  ? `<button onclick="window.fileserver.openDir('${escapeAttr(item.rel_path)}')" class="hover:text-indigo-600 dark:hover:text-indigo-400 text-left font-semibold hover:underline inline-flex items-center gap-1.5">
+                      <span>${escapeHtml(item.name)}</span>
+                      ${item.is_shared ? '<span class="px-1.5 py-0.2 text-[10px] font-semibold bg-indigo-100 text-indigo-700 dark:bg-indigo-950/80 dark:text-indigo-300 rounded border border-indigo-200 dark:border-indigo-800">Shared</span>' : ''}
                      </button>`
                   : `<span class="truncate max-w-md">${escapeHtml(item.name)}</span>`
               }
@@ -526,7 +536,8 @@
               ${
                 item.is_dir
                   ? `<button onclick="window.fileserver.openDir('${escapeAttr(item.rel_path)}')" class="font-semibold text-xs sm:text-sm text-slate-900 dark:text-slate-100 hover:text-indigo-600 dark:hover:text-indigo-400 truncate block text-left">
-                      ${escapeHtml(item.name)}
+                      <span>${escapeHtml(item.name)}</span>
+                      ${item.is_shared ? '<span class="px-1.5 py-0.2 text-[9px] font-semibold bg-indigo-100 text-indigo-700 dark:bg-indigo-950/80 dark:text-indigo-300 rounded border border-indigo-200 dark:border-indigo-800 ml-1">Shared</span>' : ''}
                      </button>`
                   : `<p class="font-medium text-xs sm:text-sm text-slate-800 dark:text-slate-200 truncate">
                       ${escapeHtml(item.name)}
@@ -584,7 +595,8 @@
     elements.uploadProgressBar.style.width = '0%';
 
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', '/upload', true);
+    const uploadUrl = `/upload?path=${encodeURIComponent(state.currentPath || '')}`;
+    xhr.open('POST', uploadUrl, true);
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) {
