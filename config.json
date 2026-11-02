@@ -1,0 +1,9 @@
+{
+  "port": 9876,
+  "shared_dir": "X:\\Shared",
+  "uploads_subfolder": "uploads",
+  "ftp_enabled": false,
+  "filezilla_manager_enabled": false,
+  "theme": "dark",
+  "version": "1.0.0"
+}

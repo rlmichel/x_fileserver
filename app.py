@@ -1,18 +1,66 @@
+"""
+Fileserver v1.0
+Servidor de arquivos local e em rede LAN com interface web moderna e responsiva.
+Execução por duplo clique no Windows ou via terminal em qualquer SO.
+"""
+
 import os
-from http.server import SimpleHTTPRequestHandler
+import sys
+import traceback
 from socketserver import TCPServer
 
-# Configurações
-PASTA_ARQUIVOS = "X:\\Shared"  # Pasta que será compartilhada
-PORTA = 9876                      # Porta do servidor (pode mudar)
+from server.config import get_shared_paths, load_config
+from server.handler import FileserverRequestHandler
+from server.net import get_lan_ip
 
-# Altera o diretório para a pasta de arquivos
-os.chdir(PASTA_ARQUIVOS)
 
-# Cria o servidor HTTP
-with TCPServer(("", PORTA), SimpleHTTPRequestHandler) as httpd:
-    print(f"Servidor de arquivos rodando em http://localhost:{PORTA}")
-    print(f"Pasta compartilhada: {PASTA_ARQUIVOS}")
-    print("Acesse de outro dispositivo usando seu IP local.")
-    print("Pressione Ctrl+C para encerrar.")
-    httpd.serve_forever()
+def main() -> None:
+    # Carrega configurações e caminhos
+    config = load_config()
+    porta = int(config.get("port", 9876))
+    shared_dir, uploads_dir = get_shared_paths()
+    lan_ip = get_lan_ip()
+
+    # Habilita reutilização rápida da porta para evitar 'Address already in use'
+    TCPServer.allow_reuse_address = True
+
+    # Inicia o servidor HTTP escutando em todas as interfaces ("0.0.0.0")
+    with TCPServer(("", porta), FileserverRequestHandler) as httpd:
+        print("=" * 60)
+        print("  📁 Fileserver v1.0 - Servidor de Arquivos")
+        print("=" * 60)
+        print(f"  Local:    http://127.0.0.1:{porta}")
+        print(f"  Rede:     http://{lan_ip}:{porta}   <-- Acesse no celular/outros PCs")
+        print(f"  Pasta:    {shared_dir}")
+        print(f"  Uploads:  {uploads_dir}")
+        print("=" * 60)
+        print("  Pressione Ctrl+C para encerrar o servidor.")
+        print("=" * 60)
+        print()
+
+        try:
+            httpd.serve_forever()
+        except KeyboardInterrupt:
+            print("\n[Fileserver] Encerrando o servidor com segurança. Até logo!")
+        finally:
+            httpd.server_close()
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n[Fileserver] Encerrado pelo usuário.")
+        sys.exit(0)
+    except Exception as e:
+        print("\n" + "=" * 60)
+        print("  [ERRO CRÍTICO AO INICIAR O FILESERVER]")
+        print("=" * 60)
+        traceback.print_exc()
+        print("=" * 60)
+        # Mantém a janela aberta no Windows quando executado por duplo clique
+        try:
+            input("\nPressione Enter para fechar esta janela...")
+        except (EOFError, KeyboardInterrupt):
+            pass
+        sys.exit(1)
