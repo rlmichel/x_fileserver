@@ -26,17 +26,17 @@ def main() -> None:
 
     # Inicia o servidor HTTP escutando em todas as interfaces ("0.0.0.0")
     with TCPServer(("", porta), FileserverRequestHandler) as httpd:
-        print("=" * 60)
-        print("  📁 Fileserver v1.0 - Servidor de Arquivos")
-        print("=" * 60)
-        print(f"  Local:    http://127.0.0.1:{porta}")
-        print(f"  Rede:     http://{lan_ip}:{porta}   <-- Acesse no celular/outros PCs")
-        print(f"  Pasta:    {shared_dir}")
-        print(f"  Uploads:  {uploads_dir}")
-        print("=" * 60)
-        print("  Pressione Ctrl+C para encerrar o servidor.")
-        print("=" * 60)
-        print()
+        print("=" * 60, flush=True)
+        print("  📁 Fileserver v1.0 - Servidor de Arquivos", flush=True)
+        print("=" * 60, flush=True)
+        print(f"  Local:    http://127.0.0.1:{porta}", flush=True)
+        print(f"  Rede:     http://{lan_ip}:{porta}   <-- Acesse no celular/outros PCs", flush=True)
+        print(f"  Pasta:    {shared_dir}", flush=True)
+        print(f"  Uploads:  {uploads_dir}", flush=True)
+        print("=" * 60, flush=True)
+        print("  Pressione Ctrl+C para encerrar o servidor.", flush=True)
+        print("=" * 60, flush=True)
+        print(flush=True)
 
         try:
             httpd.serve_forever()
