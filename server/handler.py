@@ -1,6 +1,7 @@
 """Módulo de handler HTTP customizado para o Fileserver v1.0."""
 
 from datetime import datetime
+import io
 import json
 import mimetypes
 import os
@@ -9,6 +10,7 @@ import re
 import shutil
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import parse_qs, unquote, urlparse
+import zipfile
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
 
@@ -252,6 +254,16 @@ class FileserverRequestHandler(BaseHTTPRequestHandler):
             self.handle_file_download(rel_file, inline=is_inline)
             return
 
+        # 6. Download de múltiplos arquivos em ZIP via GET
+        if path == "/api/download-zip":
+            files_param = query.get("files", [])
+            if files_param:
+                file_list = [f.strip() for f in files_param[0].split(",") if f.strip()]
+                self._send_zip_of_files(file_list)
+                return
+            self.send_error_json("Parâmetro 'files' ausente", status=HTTPStatus.BAD_REQUEST)
+            return
+
         # Rota desconhecida
         self.send_error_json("Recurso não encontrado", status=HTTPStatus.NOT_FOUND)
 
@@ -262,6 +274,10 @@ class FileserverRequestHandler(BaseHTTPRequestHandler):
 
         if path == "/upload":
             self.handle_upload()
+            return
+
+        if path == "/api/download-batch":
+            self.handle_download_batch()
             return
 
         if path == "/api/config":
@@ -417,3 +433,63 @@ class FileserverRequestHandler(BaseHTTPRequestHandler):
 
         save_config(cfg)
         self.send_json_response({"ok": True, "config": cfg})
+
+    def handle_download_batch(self) -> None:
+        """Processa a solicitação POST de múltiplos arquivos selecionados para download em ZIP."""
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length).decode("utf-8")
+            data = json.loads(body)
+            files = data.get("files", [])
+        except Exception:
+            self.send_error_json("JSON inválido no corpo da requisição", status=HTTPStatus.BAD_REQUEST)
+            return
+
+        self._send_zip_of_files(files)
+
+    def _send_zip_of_files(self, files: List[str]) -> None:
+        """Gera um arquivo ZIP em memória a partir da lista de caminhos relativos e transmite."""
+        if not files or not isinstance(files, list):
+            self.send_error_json("Nenhum arquivo especificado para download", status=HTTPStatus.BAD_REQUEST)
+            return
+
+        shared_dir, _ = get_shared_paths()
+        valid_files: List[Tuple[str, str]] = []
+
+        for rel_file in files:
+            safe_path = resolve_safe_path(shared_dir, str(rel_file))
+            if safe_path and os.path.exists(safe_path) and os.path.isfile(safe_path):
+                valid_files.append((safe_path, os.path.basename(safe_path)))
+
+        if not valid_files:
+            self.send_error_json("Nenhum arquivo válido encontrado para compor o ZIP", status=HTTPStatus.NOT_FOUND)
+            return
+
+        try:
+            zip_buffer = io.BytesIO()
+            with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+                seen_names: Dict[str, int] = {}
+                for full_path, arc_name in valid_files:
+                    if arc_name in seen_names:
+                        seen_names[arc_name] += 1
+                        base, ext = os.path.splitext(arc_name)
+                        arc_name = f"{base}_{seen_names[arc_name]}{ext}"
+                    else:
+                        seen_names[arc_name] = 0
+                    zip_file.write(full_path, arcname=arc_name)
+
+            zip_bytes = zip_buffer.getvalue()
+            timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"fileserver_{timestamp_str}.zip"
+
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "application/zip")
+            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+            self.send_header("Content-Length", str(len(zip_bytes)))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            self.wfile.write(zip_bytes)
+        except Exception as e:
+            self.send_error_json(f"Erro ao gerar pacote ZIP: {e}", status=HTTPStatus.INTERNAL_SERVER_ERROR)
+
