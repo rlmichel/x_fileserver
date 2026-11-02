@@ -13,6 +13,7 @@
     sortColumn: 'name',
     sortAsc: true,
     searchQuery: '',
+    selectedFiles: new Set(),
     theme: localStorage.getItem('fileserver_theme') || 'dark',
   };
 
@@ -32,6 +33,8 @@
     uploadPercentage: document.getElementById('upload-percentage'),
     uploadProgressBar: document.getElementById('upload-progress-bar'),
     folderStats: document.getElementById('folder-stats'),
+    btnToggleSelectAll: document.getElementById('btn-toggle-select-all'),
+    thSelectAll: document.getElementById('th-select-all'),
     tableBody: document.getElementById('file-table-body'),
     mobileCards: document.getElementById('file-cards-mobile'),
     emptyState: document.getElementById('empty-state'),
@@ -39,6 +42,12 @@
     sortSize: document.getElementById('sort-size'),
     sortDate: document.getElementById('sort-date'),
     toastContainer: document.getElementById('toast-container'),
+    // Barra de seleção em lote
+    selectionBar: document.getElementById('selection-bar'),
+    selectedCountBadge: document.getElementById('selected-count-badge'),
+    btnDownloadZip: document.getElementById('btn-download-zip'),
+    btnDownloadIndividual: document.getElementById('btn-download-individual'),
+    btnClearSelection: document.getElementById('btn-clear-selection'),
     // Modal Ferramentas
     btnOpenTools: document.getElementById('btn-open-tools'),
     modalTools: document.getElementById('modal-tools'),
@@ -161,9 +170,11 @@
       state.currentPath = data.path || '';
       state.parentPath = data.parent !== undefined ? data.parent : null;
       state.items = data.entries || [];
+      state.selectedFiles.clear();
 
       renderBreadcrumbs();
       renderItems();
+      updateSelectionUI();
     } catch (err) {
       showToast('Falha na conexão com o servidor', 'error');
       console.error('Erro ao carregar diretório:', err);
@@ -257,6 +268,126 @@
   }
 
   // =========================================================================
+  // GESTÃO DE SELEÇÃO DE ARQUIVOS
+  // =========================================================================
+  function toggleSelect(relPath) {
+    if (state.selectedFiles.has(relPath)) {
+      state.selectedFiles.delete(relPath);
+    } else {
+      state.selectedFiles.add(relPath);
+    }
+    renderItems();
+    updateSelectionUI();
+  }
+
+  function toggleSelectAll() {
+    const fileEntries = state.items.filter((i) => !i.is_dir);
+    if (fileEntries.length === 0) return;
+
+    const allSelected = fileEntries.every((i) => state.selectedFiles.has(i.rel_path));
+    if (allSelected) {
+      state.selectedFiles.clear();
+    } else {
+      fileEntries.forEach((i) => state.selectedFiles.add(i.rel_path));
+    }
+    renderItems();
+    updateSelectionUI();
+  }
+
+  function updateSelectionUI() {
+    const count = state.selectedFiles.size;
+    elements.selectedCountBadge.textContent = count;
+
+    if (count > 0) {
+      elements.selectionBar.classList.remove('translate-y-24', 'opacity-0', 'pointer-events-none');
+      elements.selectionBar.classList.add('translate-y-0', 'opacity-100');
+    } else {
+      elements.selectionBar.classList.add('translate-y-24', 'opacity-0', 'pointer-events-none');
+      elements.selectionBar.classList.remove('translate-y-0', 'opacity-100');
+    }
+
+    const fileEntries = state.items.filter((i) => !i.is_dir);
+    const hasFiles = fileEntries.length > 0;
+    const allSelected = hasFiles && fileEntries.every((i) => state.selectedFiles.has(i.rel_path));
+
+    if (elements.thSelectAll) {
+      elements.thSelectAll.checked = allSelected;
+      elements.thSelectAll.disabled = !hasFiles;
+    }
+    if (elements.btnToggleSelectAll) {
+      elements.btnToggleSelectAll.textContent = allSelected ? 'Desmarcar todos' : 'Selecionar todos';
+      elements.btnToggleSelectAll.style.display = hasFiles ? 'inline-block' : 'none';
+    }
+  }
+
+  // =========================================================================
+  // DOWNLOAD EM LOTE (ZIP e INDIVIDUAIS)
+  // =========================================================================
+  async function downloadSelectedZip() {
+    const files = Array.from(state.selectedFiles);
+    if (files.length === 0) return;
+
+    showToast(`Gerando pacote ZIP com ${files.length} arquivo(s)...`, 'info', 4000);
+
+    try {
+      const res = await fetch('/api/download-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files }),
+      });
+
+      if (!res.ok) {
+        let errMsg = 'Falha ao compor arquivo ZIP';
+        try {
+          const errData = await res.json();
+          if (errData.error) errMsg = errData.error;
+        } catch {}
+        throw new Error(errMsg);
+      }
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
+      const timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+      a.download = `fileserver_${timestamp}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      a.remove();
+
+      showToast('Download do pacote ZIP iniciado com sucesso!', 'success');
+    } catch (err) {
+      showToast(err.message || 'Erro ao gerar ZIP', 'error');
+    }
+  }
+
+  async function downloadSelectedIndividual() {
+    const files = Array.from(state.selectedFiles);
+    if (files.length === 0) return;
+
+    showToast(`Iniciando download individual de ${files.length} arquivo(s)...`, 'info', 2500);
+
+    for (let i = 0; i < files.length; i++) {
+      const relPath = files[i];
+      const fileName = relPath.split('/').pop() || 'download';
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = `/files/${encodeURIComponent(relPath)}`;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      // Intervalo de segurança para o navegador não bloquear popups
+      if (i < files.length - 1) {
+        await new Promise((r) => setTimeout(r, 300));
+      }
+    }
+  }
+
+  // =========================================================================
   // RENDERIZAÇÃO DOS ITENS (Tabela Desktop e Cards Mobile)
   // =========================================================================
   function renderItems() {
@@ -310,7 +441,7 @@
     if (state.currentPath && !state.searchQuery) {
       tableHtml += `
         <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors group" onclick="window.fileserver.goParent()">
-          <td colspan="4" class="py-2.5 px-4 font-semibold text-indigo-600 dark:text-indigo-400">
+          <td colspan="5" class="py-2.5 px-4 font-semibold text-indigo-600 dark:text-indigo-400">
             <div class="flex items-center gap-2">
               <i data-lucide="corner-left-up" class="w-4 h-4 text-indigo-500"></i>
               <span>.. (subir um nível)</span>
@@ -324,11 +455,19 @@
       const iconInfo = getFileIconInfo(item);
       const downloadUrl = `/files/${encodeURIComponent(item.rel_path)}`;
       const canPreview = iconInfo.isImage || iconInfo.isText;
+      const isSelected = state.selectedFiles.has(item.rel_path);
 
-      // HTML da linha da tabela desktop
+      // HTML da linha da tabela desktop (5 colunas)
       tableHtml += `
-        <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group">
-          <td class="py-3 px-4 font-medium text-slate-800 dark:text-slate-200">
+        <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group ${isSelected ? 'bg-indigo-50/50 dark:bg-indigo-950/30' : ''}">
+          <td class="py-3 px-3 text-center">
+            ${
+              !item.is_dir
+                ? `<input type="checkbox" class="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-800 cursor-pointer" ${isSelected ? 'checked' : ''} onchange="window.fileserver.toggleSelect('${escapeAttr(item.rel_path)}')">`
+                : `<span class="text-slate-300 dark:text-slate-700 select-none text-xs">•</span>`
+            }
+          </td>
+          <td class="py-3 px-3 font-medium text-slate-800 dark:text-slate-200">
             <div class="flex items-center gap-3">
               <i data-lucide="${iconInfo.icon}" class="w-5 h-5 flex-shrink-0 ${iconInfo.color}"></i>
               ${
@@ -371,42 +510,49 @@
 
       // HTML do Card Mobile
       cardsHtml += `
-        <div class="p-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm flex items-center justify-between gap-3">
-          <div class="flex items-center gap-3 min-w-0 flex-1">
+        <div class="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm flex items-center justify-between gap-2.5 transition-colors ${isSelected ? 'border-indigo-400 dark:border-indigo-600 bg-indigo-50/40 dark:bg-indigo-950/30' : ''}">
+          <div class="flex items-center gap-2.5 min-w-0 flex-1">
+            ${
+              !item.is_dir
+                ? `<div class="flex items-center flex-shrink-0">
+                    <input type="checkbox" class="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-800 cursor-pointer" ${isSelected ? 'checked' : ''} onchange="window.fileserver.toggleSelect('${escapeAttr(item.rel_path)}')">
+                   </div>`
+                : ''
+            }
             <div class="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 flex-shrink-0">
-              <i data-lucide="${iconInfo.icon}" class="w-5 h-5 ${iconInfo.color}"></i>
+              <i data-lucide="${iconInfo.icon}" class="w-4 h-4 sm:w-5 sm:h-5 ${iconInfo.color}"></i>
             </div>
             <div class="min-w-0 flex-1">
               ${
                 item.is_dir
-                  ? `<button onclick="window.fileserver.openDir('${escapeAttr(item.rel_path)}')" class="font-semibold text-sm text-slate-900 dark:text-slate-100 hover:text-indigo-600 dark:hover:text-indigo-400 truncate block text-left">
+                  ? `<button onclick="window.fileserver.openDir('${escapeAttr(item.rel_path)}')" class="font-semibold text-xs sm:text-sm text-slate-900 dark:text-slate-100 hover:text-indigo-600 dark:hover:text-indigo-400 truncate block text-left">
                       ${escapeHtml(item.name)}
                      </button>`
-                  : `<p class="font-medium text-sm text-slate-800 dark:text-slate-200 truncate">
+                  : `<p class="font-medium text-xs sm:text-sm text-slate-800 dark:text-slate-200 truncate">
                       ${escapeHtml(item.name)}
                      </p>`
               }
-              <div class="flex items-center gap-2 mt-0.5 text-xs text-slate-400">
+              <div class="flex items-center gap-1.5 mt-0.5 text-[11px] text-slate-400">
                 <span>${item.size_formatted}</span>
                 <span>•</span>
                 <span>${item.mtime_iso.split(' ')[0]}</span>
               </div>
             </div>
           </div>
-          <div class="flex items-center gap-1">
+          <div class="flex items-center gap-1 flex-shrink-0">
             ${
               canPreview
-                ? `<button onclick="window.fileserver.previewItem('${escapeAttr(item.rel_path)}', '${escapeAttr(item.name)}', ${Boolean(iconInfo.isImage)})" class="p-2 text-slate-500 dark:text-slate-400 hover:text-indigo-600 rounded-lg bg-slate-50 dark:bg-slate-800" title="Ver">
+                ? `<button onclick="window.fileserver.previewItem('${escapeAttr(item.rel_path)}', '${escapeAttr(item.name)}', ${Boolean(iconInfo.isImage)})" class="p-1.5 text-slate-500 dark:text-slate-400 hover:text-indigo-600 rounded-lg bg-slate-50 dark:bg-slate-800" title="Ver">
                     <i data-lucide="eye" class="w-4 h-4"></i>
                    </button>`
                 : ''
             }
             ${
               !item.is_dir
-                ? `<a href="${downloadUrl}" download="${escapeAttr(item.name)}" class="p-2 text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg inline-flex items-center justify-center shadow-sm" title="Baixar">
+                ? `<a href="${downloadUrl}" download="${escapeAttr(item.name)}" class="p-1.5 text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg inline-flex items-center justify-center shadow-sm" title="Baixar">
                     <i data-lucide="download" class="w-4 h-4"></i>
                    </a>`
-                : `<button onclick="window.fileserver.openDir('${escapeAttr(item.rel_path)}')" class="p-2 text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 rounded-lg bg-slate-100 dark:bg-slate-800">
+                : `<button onclick="window.fileserver.openDir('${escapeAttr(item.rel_path)}')" class="p-1.5 text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 rounded-lg bg-slate-100 dark:bg-slate-800">
                     <i data-lucide="chevron-right" class="w-4 h-4"></i>
                    </button>`
             }
@@ -457,7 +603,6 @@
         } catch {
           showToast('Upload concluído com sucesso!', 'success');
         }
-        // Se estivermos dentro da pasta uploads, ou em qualquer pasta, recarrega
         loadDirectory(state.currentPath);
       } else {
         let errMessage = 'Erro no envio do arquivo.';
@@ -634,6 +779,27 @@
       }
     });
 
+    // Seleção em lote
+    if (elements.thSelectAll) {
+      elements.thSelectAll.addEventListener('change', toggleSelectAll);
+    }
+    if (elements.btnToggleSelectAll) {
+      elements.btnToggleSelectAll.addEventListener('click', toggleSelectAll);
+    }
+    if (elements.btnDownloadZip) {
+      elements.btnDownloadZip.addEventListener('click', downloadSelectedZip);
+    }
+    if (elements.btnDownloadIndividual) {
+      elements.btnDownloadIndividual.addEventListener('click', downloadSelectedIndividual);
+    }
+    if (elements.btnClearSelection) {
+      elements.btnClearSelection.addEventListener('click', () => {
+        state.selectedFiles.clear();
+        renderItems();
+        updateSelectionUI();
+      });
+    }
+
     // Busca
     elements.searchInput.addEventListener('input', (e) => {
       state.searchQuery = e.target.value;
@@ -724,6 +890,8 @@
     openDir: (relPath) => loadDirectory(relPath),
     goParent: () => loadDirectory(state.parentPath || ''),
     previewItem: (relPath, filename, isImage) => openPreview(relPath, filename, isImage),
+    toggleSelect: (relPath) => toggleSelect(relPath),
+    toggleSelectAll: () => toggleSelectAll(),
   };
 
   // Inicialização

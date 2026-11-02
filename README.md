@@ -141,7 +141,12 @@ A API REST foi padronizada para permitir que a versão web atual e o futuro apli
 - **Rota**: `GET /files/<caminho_relativo>`
 - **Parâmetros**: `?inline=1` (opcional, para visualização no navegador ao invés de forçar download).
 
-### 4. Upload de Arquivo
+### 4. Download em Lote (Pacote ZIP)
+- **Rota**: `POST /api/download-batch` (ou `GET /api/download-zip?files=arq1,arq2`)
+- **Corpo (POST)**: `{"files": ["relatorio.pdf", "foto.png"]}`
+- **Resposta**: Arquivo compactado `.zip` gerado via `zipfile` (Python stdlib) contendo os arquivos selecionados.
+
+### 5. Upload de Arquivo
 - **Rota**: `POST /upload`
 - **Formato**: `multipart/form-data`
 - **Resposta (200 OK)**:
@@ -160,7 +165,7 @@ A API REST foi padronizada para permitir que a versão web atual e o futuro apli
 }
 ```
 
-### 5. Configuração
+### 6. Configuração
 - **Rota**: `POST /api/config`
 - **Corpo**: JSON com opções a atualizar (ex: `{"ftp_enabled": true}`).
 
